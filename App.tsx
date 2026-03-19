@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MessageList from './components/MessageList';
@@ -9,11 +8,37 @@ import OtherAppsDisplay from './components/OtherAppsDisplay';
 import { ChatMessage, MessageRole, MessagePart, Attachment, AppView } from './types';
 import { getGeminiResponse } from './services/geminiService';
 
+const STORAGE_KEY = 'n8n_mentor_messages_v1';
+
 const App: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [activeView, setActiveView] = useState<AppView>('chat');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // localStorage'dan geçmiş mesajları yükle
+  useEffect(() => {
+    try {
+      const kayitliMesajlar = localStorage.getItem(STORAGE_KEY);
+      if (kayitliMesajlar) {
+        const parsed = JSON.parse(kayitliMesajlar);
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+        }
+      }
+    } catch (error) {
+      console.error('Mesaj geçmişi yüklenemedi:', error);
+    }
+  }, []);
+
+  // Mesajlar her değiştiğinde localStorage'a kaydet
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.error('Mesaj geçmişi kaydedilemedi:', error);
+    }
+  }, [messages]);
 
   const handleSendMessage = async (text: string, attachments: Attachment[]) => {
     const userParts: MessagePart[] = [];
@@ -38,11 +63,12 @@ const App: React.FC = () => {
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsTyping(true);
 
     try {
-      const responseText = await getGeminiResponse(messages, text, attachments);
+      const responseText = await getGeminiResponse(updatedMessages, text, attachments);
       
       const botMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -54,6 +80,15 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
       console.error("Chat Error:", error);
+
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: MessageRole.MODEL,
+        parts: [{ text: 'Bir hata oluştu. Lütfen tekrar dene.' }],
+        timestamp: Date.now(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsTyping(false);
     }
@@ -79,7 +114,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 flex flex-col h-full bg-slate-50 relative min-w-0">
-        {/* Header */}
         <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-6 z-10 shadow-sm shrink-0">
           <div className="flex items-center gap-4 min-w-0">
             {isSidebarCollapsed && (
@@ -103,7 +137,6 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {/* Content Area */}
         <div className="flex-1 flex flex-col min-h-0 bg-[#f8fafc] overflow-hidden">
           {activeView === 'chat' && (
             <>
