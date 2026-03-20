@@ -9,6 +9,7 @@ import { ChatMessage, MessageRole, MessagePart, Attachment, AppView } from './ty
 import { getGeminiResponse } from './services/geminiService';
 
 const STORAGE_KEY = 'n8n_mentor_messages_v1';
+const MAX_MESSAGES = 30;
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -17,32 +18,40 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
 
-  // localStorage'dan geçmiş mesajları yükle
+  // localStorage'dan yükle
   useEffect(() => {
     try {
-      const kayitliMesajlar = localStorage.getItem(STORAGE_KEY);
-
-      if (kayitliMesajlar) {
-        const parsed = JSON.parse(kayitliMesajlar);
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
           setMessages(parsed);
         }
       }
-    } catch (error) {
-      console.error('Mesaj geçmişi yüklenemedi:', error);
+    } catch (e) {
+      console.error('Yükleme hatası:', e);
     } finally {
       setIsStorageLoaded(true);
     }
   }, []);
 
-  // Mesajlar her değiştiğinde localStorage'a kaydet
+  // localStorage'a kaydet (temizlenmiş ve limitli)
   useEffect(() => {
     if (!isStorageLoaded) return;
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } catch (error) {
-      console.error('Mesaj geçmişi kaydedilemedi:', error);
+      const lastMessages = messages.slice(-MAX_MESSAGES);
+
+      const cleaned = lastMessages.map(msg => ({
+        ...msg,
+        parts: msg.parts
+          .filter(p => 'text' in p) // sadece text bırak
+          .map(p => ({ text: p.text }))
+      }));
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+    } catch (e) {
+      console.error('Kaydetme hatası:', e);
     }
   }, [messages, isStorageLoaded]);
 
@@ -102,50 +111,32 @@ const App: React.FC = () => {
 
   const getHeaderTitle = () => {
     switch (activeView) {
-      case 'chat':
-        return 'Ekran Görüntüsü, Json ya da Dosya Yükleyip Sorular Sorarak Çok Başarılı İş Akışları Yapabilirsin!';
-      case 'links':
-        return 'Faydalı Kaynaklar ve Hızlı Erişim Bağlantıları';
-      case 'other-apps':
-        return 'Yapay Zeka Destekli Diğer Çözümlerimiz';
-      case 'contact':
-        return 'Suat Tayfun Topak ile İletişime Geçin!';
-      default:
-        return 'N8N Mentor';
+      case 'chat': return 'Ekran Görüntüsü, Json ya da Dosya Yükleyip Sorular Sorarak Çok Başarılı İş Akışları Yapabilirsin!';
+      case 'links': return 'Faydalı Kaynaklar ve Hızlı Erişim Bağlantıları';
+      case 'other-apps': return 'Yapay Zeka Destekli Diğer Çözümlerimiz';
+      case 'contact': return 'Suat Tayfun Topak ile İletişime Geçin!';
+      default: return 'N8N Mentor';
     }
   };
 
   return (
     <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800 antialiased text-[15px]">
-      <Sidebar
-        onViewChange={setActiveView}
-        activeView={activeView}
+      <Sidebar 
+        onViewChange={setActiveView} 
+        activeView={activeView} 
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
-
+      
       <main className="flex-1 flex flex-col h-full bg-slate-50 relative min-w-0">
         <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-6 z-10 shadow-sm shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
-            {isSidebarCollapsed && (
-              <button
-                onClick={() => setIsSidebarCollapsed(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 shrink-0"
-                title="Menüyü Aç"
-              >
-                <i className="fas fa-bars text-lg"></i>
-              </button>
-            )}
-            <h2 className="text-[15px] font-bold text-[#1e293b] whitespace-nowrap overflow-hidden text-ellipsis">
-              {getHeaderTitle()}
-            </h2>
-          </div>
+          <h2 className="text-[15px] font-bold text-[#1e293b]">
+            {getHeaderTitle()}
+          </h2>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full text-[12px] font-bold border border-green-100">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              Gemini Aktif
-            </div>
+          <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full text-[12px] font-bold border border-green-100">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            Gemini Aktif
           </div>
         </header>
 
